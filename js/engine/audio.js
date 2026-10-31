@@ -30,6 +30,9 @@ export class AudioEngine {
       this.master = ctx.createGain();
       this.master.gain.value = 0.8;
       this.master.connect(comp).connect(ctx.destination);
+      this.meter = ctx.createAnalyser(); // DEBUG: remove when done
+      this.meter.fftSize = 32768;        // ~0.7 s window, so polling twice a second catches every peak
+      comp.connect(this.meter);
       this.styleId = null;
       this.nodes = [];
     }
@@ -87,6 +90,14 @@ export class AudioEngine {
 
   setTempo(bpm) {
     if (this.dly) this.dly.delayTime.setTargetAtTime((60 / bpm) * this.delayBeats, this.ctx.currentTime, 0.1);
+  }
+
+  peak() { // DEBUG: loudest sample in the last ~0.7 s; above 1.0 means clipping
+    const buf = (this.buf ||= new Float32Array(this.meter.fftSize));
+    this.meter.getFloatTimeDomainData(buf);
+    let m = 0;
+    for (let i = 0; i < buf.length; i++) m = Math.max(m, Math.abs(buf[i]));
+    return m;
   }
 
   play(role, t, ev, voice) {

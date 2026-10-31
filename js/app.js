@@ -218,3 +218,13 @@ selectStyle(state.styleId);
 renderMode();
 renderTransport();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js');
+
+// DEBUG: scheduler lateness, output peak, and (where supported) audio underruns
+let peakMax = 0;
+setInterval(() => {
+  if (!state.playing || !engine.ctx) return;
+  peakMax = Math.max(peakMax * 0.995, engine.peak());
+  const ps = engine.ctx.playoutStats;
+  const under = ps ? ` · underruns ${ps.fallbackFramesEvents}` : '';
+  $('#debug').textContent = `late ${seq.late} · peak ${peakMax.toFixed(2)}${under}`;
+}, 500);

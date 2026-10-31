@@ -27,6 +27,7 @@ export class Sequencer {
   start(song, arranger) {
     this.stop();
     this.endPending = false;
+    this.late = 0;
     this.song = song;
     this.arranger = arranger;
     this.step = 0;
@@ -53,6 +54,7 @@ export class Sequencer {
     const ctx = this.engine.ctx;
     if (!ctx) return;
     while (this.cancel && this.next < ctx.currentTime + LOOKAHEAD) {
+      if (this.next < ctx.currentTime) this.late++; // DEBUG: a step scheduled after its start time
       const song = this.song, s = this.step % STEPS, stepDur = 60 / song.bpm / 4;
       if (s === 0) {
         const idx = this.step / STEPS;
