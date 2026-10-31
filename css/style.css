@@ -1,0 +1,58 @@
+:root {
+  --bg: #171428;
+  --surface: #221e3a;
+  --line: #352f55;
+  --text: #ece7fa;
+  --muted: #9b94bd;
+  --accent: #ff9f87;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); }
+body {
+  font: 16px/1.4 system-ui, sans-serif;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+main { max-width: 480px; margin: 0 auto; padding: 16px; display: grid; gap: 14px; }
+
+button, select {
+  font: inherit; color: inherit; background: var(--surface);
+  border: 1px solid var(--line); border-radius: 10px; min-height: 44px; padding: 0 12px;
+}
+button:active { background: var(--line); }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+[hidden] { display: none !important; }
+
+.seg { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: #2a1620; border-color: var(--accent); font-weight: 600; }
+
+.now { padding: 12px 0 4px; }
+.now h1 { margin: 0; font-size: 1.9rem; font-weight: 600; letter-spacing: -0.01em; }
+.now p { margin: 4px 0 0; color: var(--muted); }
+#section { color: var(--text); }
+
+.transport { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px; }
+.primary { background: var(--accent); color: #2a1620; border-color: var(--accent); font-weight: 600; min-height: 52px; }
+.primary:active { background: #ffb8a5; }
+
+.field { display: grid; gap: 6px; color: var(--muted); font-size: 0.9rem; }
+.field select { color: var(--text); width: 100%; }
+.check { display: flex; gap: 10px; align-items: center; color: var(--muted); }
+.check input { width: 22px; height: 22px; accent-color: var(--accent); }
+.grid { display: grid; grid-template-columns: 1fr 1.6fr; gap: 10px; }
+
+.level { display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; gap: 4px; }
+.level button { padding: 0; font-size: 1.3rem; }
+.level output { text-align: center; font-variant-numeric: tabular-nums; color: var(--text); }
+.level.big { max-width: 220px; }
+.level.big output { font-size: 1.4rem; }
+
+#mixer { display: grid; gap: 8px; margin-top: 4px; }
+.row {
+  display: grid; grid-template-columns: 56px 1fr auto; align-items: center; gap: 8px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 6px 8px;
+}
+.row .name { font-weight: 600; }
+.row select { min-width: 0; background: var(--bg); }
+.row .level { grid-template-columns: 40px 64px 40px; }
+.row .level button { min-height: 40px; background: var(--bg); }
