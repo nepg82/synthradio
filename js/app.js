@@ -219,12 +219,16 @@ renderMode();
 renderTransport();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js');
 
-// DEBUG: scheduler lateness, output peak, and (where supported) audio underruns
-let peakMax = 0;
+// DEBUG: scheduler lateness, output peak, audio-clock drift
+let peakMax = 0, lastCtx = null, base = 0, last = 0, worst = 0;
 setInterval(() => {
-  if (!state.playing || !engine.ctx) return;
+  const ctx = engine.ctx;
+  if (!state.playing || !ctx) return;
+  const off = performance.now() / 1000 - ctx.currentTime;
+  if (ctx !== lastCtx) { lastCtx = ctx; base = last = off; worst = 0; }
+  worst = Math.max(worst, (off - last) * 1000); // biggest stall in one 0.5 s interval
+  last = off;
   peakMax = Math.max(peakMax * 0.995, engine.peak());
-  const ps = engine.ctx.playoutStats;
-  const under = ps ? ` · underruns ${ps.fallbackFramesEvents}` : '';
-  $('#debug').textContent = `late ${seq.late} · peak ${peakMax.toFixed(2)}${under}`;
+  $('#debug').textContent =
+    `late ${seq.late} · peak ${peakMax.toFixed(2)} · drift ${((off - base) * 1000) | 0} ms · worst ${worst | 0} ms`;
 }, 500);
