@@ -175,7 +175,18 @@ function syncControls() {
 
 // ---- Events -----------------------------------------------------------------
 $('#play').onclick = () => (state.playing ? stop() : play());
-$('#next').onclick = () => { if (state.playing) { seq.stop(); clearTimeout(gapTimer); nextRadio(); } };
+
+$('#next').onclick = () => {
+  if (!state.playing) return;
+  if (seq.endAfterPhrase()) {
+    $('#section').textContent = 'Ending song…';
+  } else { // already in the tail or the gap between songs: just move on
+    clearTimeout(gapTimer);
+    seq.stop();
+    nextRadio();
+  }
+};
+
 $('#style').onchange = e => { selectStyle(e.target.value); restart(); };
 $('#key').onchange = e => { state.key = +e.target.value; rebuild(); };
 $('#prog').onchange = e => { state.prog = +e.target.value; rebuild(); };

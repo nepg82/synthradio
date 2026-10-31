@@ -34,7 +34,14 @@ export function planRadio(style, userBpm, rnd = Math.random) {
     }
     plan.push({ section: 'Main', active });
   }
-  for (let i = G - 1; i >= 1; i--) plan.push({ section: 'Outro', active: upTo(i) });
+  
+  // Outro mirrors the intro, but the last group standing is never drums-only.
+  const isDrums = g => g.every(id => style.roles.find(r => r.id === id).part === 'drum');
+  const last = groups.find(g => !isDrums(g));
+  const outroOrder = [last, ...groups.filter(g => g !== last)];
+  const outroUpTo = n => new Set(outroOrder.slice(0, n).flat());
+  for (let i = G - 1; i >= 1; i--) plan.push({ section: 'Outro', active: outroUpTo(i) });
+  
   plan.forEach((p, i) => (p.chord = i));
 
   cfg.decorate?.(plan, { song, R, groups }); // style hook: builds, drops, breakdowns…

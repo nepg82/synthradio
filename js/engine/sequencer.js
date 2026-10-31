@@ -26,6 +26,7 @@ export class Sequencer {
   // arranger(phraseIndex) → { chord, active:Set<roleId>, section } | null (song over)
   start(song, arranger) {
     this.stop();
+    this.endPending = false;
     this.song = song;
     this.arranger = arranger;
     this.step = 0;
@@ -39,6 +40,14 @@ export class Sequencer {
     clearTimeout(this.endTimer);
   }
 
+  // Radio "Next song": let the current phrase finish, then end like a natural song end.
+  // Returns false if nothing is currently scheduling, so the caller can skip immediately.
+  endAfterPhrase() {
+    if (!this.cancel) return false;
+    this.endPending = true;
+    return true;
+  }
+
   tick() {
     const ctx = this.engine.ctx;
     if (!ctx) return;
@@ -46,7 +55,7 @@ export class Sequencer {
       const song = this.song, s = this.step % STEPS, stepDur = 60 / song.bpm / 4;
       if (s === 0) {
         const idx = this.step / STEPS;
-        this.phrase = this.arranger(idx);
+        this.phrase = this.endPending ? null : this.arranger(idx);
         if (!this.phrase) return this.finish();
         this.cb.onPhrase(this.phrase, idx);
       }
