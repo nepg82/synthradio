@@ -20,7 +20,7 @@ export default {
   },
 
   fx: {
-    reverb: { seconds: 3.2, decay: 2.5 },
+    reverb: { seconds: 2.2, decay: 2.2 },
     delay: { beats: 0.75, feedback: 0.38, lp: 2500 },
   },
 
@@ -73,7 +73,7 @@ export default {
     {
       id: 'pad', label: 'Pad', part: 'chord', kind: 'synth', mix: -3, send: { rev: 0.6 },
       voices: [
-        { name: 'Lush Saws',    p: { osc: [osc('sawtooth', 0.33, -12), osc('sawtooth', 0.33), osc('sawtooth', 0.33, 12)], filter: { freq: 1400, q: 0.5 }, amp: { a: 0.9, d: 0.5, s: 0.8, r: 1.4 }, gain: 0.1 } },
+        { name: 'Lush Saws',    p: { osc: [osc('sawtooth', 0.5, -10), osc('sawtooth', 0.5, 10)], filter: { freq: 1400, q: 0.5 }, amp: { a: 0.9, d: 0.5, s: 0.8, r: 1.4 }, gain: 0.1 } },
         { name: 'Glass',        p: { osc: [osc('triangle', 0.6, -6), osc('triangle', 0.6, 6), osc('sine', 0.4, 0, 2)], filter: { freq: 3500 }, amp: { a: 0.6, d: 0.5, s: 0.8, r: 1.2 }, gain: 0.13 } },
         { name: 'Warm Strings', p: { osc: [osc('sawtooth', 0.4, -8), osc('sawtooth', 0.4, 8)], filter: { freq: 900, env: 600, decay: 1.5 }, amp: { a: 1.0, d: 0.6, s: 0.8, r: 1.5 }, gain: 0.11 } },
         { name: 'Dream Choir',  p: { osc: [osc('sine'), osc('triangle', 0.4, 7, 2), osc('sine', 0.15, 0, 3)], filter: { freq: 3000 }, vibrato: { rate: 5, depth: 8 }, amp: { a: 0.8, d: 0.5, s: 0.85, r: 1.3 }, gain: 0.15 } },

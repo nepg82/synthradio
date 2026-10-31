@@ -1,6 +1,6 @@
 // Service worker: cache the app shell so it works offline.
 // Bump CACHE whenever any file changes, or installed copies keep serving the old one.
-const CACHE = 'synth-radio-v1.0.2';
+const CACHE = 'synth-radio-v1.0.3';
 const ASSETS = [
   './', './index.html', './manifest.json', './css/style.css',
   './js/app.js',

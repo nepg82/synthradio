@@ -7,8 +7,8 @@ const levelGain = db => (db < MIN_DB ? 0 : dbToGain(db));
 
 function impulse(ctx, seconds, decay) {
   const n = (ctx.sampleRate * seconds) | 0;
-  const buf = ctx.createBuffer(2, n, ctx.sampleRate);
-  for (let c = 0; c < 2; c++) {
+  const buf = ctx.createBuffer(1, n, ctx.sampleRate);
+  for (let c = 0; c < 1; c++) {
     const d = buf.getChannelData(c);
     for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n) ** decay;
   }

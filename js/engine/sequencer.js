@@ -3,7 +3,7 @@
 // wakes every 100 ms and schedules audio ~0.5 s ahead of the clock.
 import { PARTS } from './parts.js';
 
-const STEPS = 32, LOOKAHEAD = 0.5, TICK_MS = 100, TAIL_MS = 2500;
+const STEPS = 32, LOOKAHEAD = 1.2, TICK_MS = 250, TAIL_MS = 2500;
 
 function makeTicker(fn, ms) {
   try {
@@ -30,9 +30,10 @@ export class Sequencer {
     this.song = song;
     this.arranger = arranger;
     this.step = 0;
-    this.next = this.engine.ctx.currentTime + 0.2;
+	this.next = this.engine.ctx.currentTime + 0.1;
     this.engine.setTempo(song.bpm);
     this.cancel = makeTicker(() => this.tick(), TICK_MS);
+    this.tick(); // schedule immediately instead of waiting for the first tick
   }
 
   stop() {
