@@ -54,9 +54,7 @@ export class AudioEngine {
     this.nodes = [];
     const keep = n => (this.nodes.push(n), n);
 
-    const rev = keep(ctx.createConvolver());
-    rev.buffer = impulse(ctx, fx.reverb.seconds, fx.reverb.decay);
-    rev.connect(this.master);
+    const rev = null; // TEST: convolver disabled (heaviest node in the graph)
 
     const dly = (this.dly = keep(ctx.createDelay(4)));
     const fb = keep(ctx.createGain()); fb.gain.value = fx.delay.feedback;
@@ -70,7 +68,7 @@ export class AudioEngine {
       input.gain.value = levelGain(levels[role.id]);
       input.connect(this.master);
       const send = (dest, amt) => {
-        if (!amt) return;
+        if (!amt || !dest) return;
         const g = keep(ctx.createGain()); g.gain.value = amt;
         input.connect(g); g.connect(dest);
       };

@@ -4,8 +4,8 @@
 // page keeps playing from the audio thread's queue).
 import { PARTS } from './parts.js';
 
-const STEPS = 32, TICK_MS = 250, TAIL_S = 2.5;
-const LOOKAHEAD_VISIBLE = 1.2, LOOKAHEAD_HIDDEN = 4;
+const STEPS = 32, TICK_MS = 50, TAIL_S = 2.5;
+const LOOKAHEAD_VISIBLE = 0.5, LOOKAHEAD_HIDDEN = 0.5;
 
 function makeTicker(fn, ms) {
   try {
