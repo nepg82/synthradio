@@ -11,6 +11,9 @@
 html { background: var(--bg); }
 html, body { margin: 0; color: var(--text); }
 
+#dbg { white-space: pre-wrap; font-size: 0.7rem; max-height: 40vh; overflow: auto; color: var(--muted); }
+.build { cursor: pointer; }
+
 body::before {
   content: "";
   position: fixed;

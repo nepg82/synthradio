@@ -25,11 +25,11 @@ export class Sequencer {
   endAt = null;         // audio-clock time a "Next song" fade ends the song
   phraseStarts = [];    // audio-clock start times of scheduled phrases
 
-  constructor(engine, { onPhrase, onEnd }) {
+  constructor(engine, { onPhrase, onEnd, onResync }) {
     this.engine = engine;
-    this.cb = { onPhrase, onEnd };
+    this.cb = { onPhrase, onEnd, onResync };
   }
-
+  
   // Ticker lives for the whole play session: open on Play, close on Stop.
   open() { this.closeTicker ||= makeTicker(() => this.tick(), TICK_MS); }
   close() { this.stop(); this.closeTicker?.(); this.closeTicker = null; }
@@ -85,11 +85,11 @@ export class Sequencer {
     }
 
     // Woke up far behind (frozen page)? Skip to the next phrase instead of scheduling the past.
-    if (this.next < ctx.currentTime - 0.5) {
-      this.step += (STEPS - (this.step % STEPS)) % STEPS;
-      this.next = ctx.currentTime + 0.1;
+    if (this.next < ctx.currentTime - 0.1) { // stalled: resume where we were, never skip music
+      this.cb.onResync?.(Math.round((ctx.currentTime - this.next) * 1000), this.step >> 5);
+      this.next = ctx.currentTime + 0.05;
     }
-
+    
     const look = document.hidden ? LOOKAHEAD_HIDDEN : LOOKAHEAD_VISIBLE;
     if (this.endAt !== null && this.next >= this.endAt) return this.finish(this.endAt);
     while (this.next < ctx.currentTime + look) {

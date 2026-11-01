@@ -30,8 +30,23 @@ const save = () => {
 const style = () => STYLES.find(s => s.id === state.styleId) || STYLES[0];
 const levelsFor = st => (state.levels[st.id] ||= Object.fromEntries(st.roles.map(r => [r.id, r.mix])));
 
+// Event log that survives the page being killed. Tap the build stamp to view it.
+const LOG_KEY = 'synthradio-log';
+let LOG = [];
+try { LOG = JSON.parse(localStorage.getItem(LOG_KEY) || '[]'); } catch {}
+function log(msg) {
+  LOG.push(new Date().toLocaleString('sv-SE').slice(5) + ' ' + msg);
+  if (LOG.length > 500) LOG.splice(0, LOG.length - 500);
+  try { localStorage.setItem(LOG_KEY, JSON.stringify(LOG)); } catch {}
+}
+
 const engine = new AudioEngine();
-const seq = new Sequencer(engine, { onPhrase, onEnd });
+
+const seq = new Sequencer(engine, {
+  onPhrase, onEnd,
+  onResync: (ms, phrase) => log(`RESYNC ${ms} ms behind at phrase ${phrase}`),
+});
+
 let gapTimer;
 const session = initMediaSession({
   onPlay: () => (state.paused ? resume() : !state.playing && play()),
@@ -48,6 +63,7 @@ async function play() {
   const ctx = engine.ctx;
   
   ctx.onstatechange = () => {
+    log(`ctx ${ctx.state}`);
     // If the system suspends us while we should be playing, try to resume.
     if (ctx === engine.ctx && ctx.state !== 'running' && ctx.state !== 'closed' && state.playing && !state.paused) {
       ctx.resume().catch(() => {});
@@ -132,6 +148,7 @@ function onEnd(startAt) {
 function adopt(song) {
   state.song = song;
   session.setTrack(song);
+  log(`song "${song.title}" ${song.bpm} BPM`);
   state.key = song.key; state.bpm = song.bpm;
   state.prog = song.style.progressions.indexOf(song.progression);
   for (const [id, v] of Object.entries(song.voices)) state.voices[id] = v.name;
@@ -258,3 +275,10 @@ selectStyle(state.styleId);
 renderMode();
 renderTransport();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js');
+
+document.addEventListener('visibilitychange', () => log(`page ${document.visibilityState}`));
+$('#ver').onclick = () => {
+  const p = $('#dbg');
+  p.hidden = !p.hidden;
+  if (!p.hidden) p.textContent = LOG.slice(-150).reverse().join('\n'); // newest first
+};
