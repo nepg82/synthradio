@@ -5,7 +5,7 @@
 import { PARTS } from './parts.js';
 
 const STEPS = 32, TICK_MS = 250, TAIL_S = 2.5;
-const LOOKAHEAD_VISIBLE = 1.2, LOOKAHEAD_HIDDEN = 45;
+const LOOKAHEAD_VISIBLE = 1.2, LOOKAHEAD_HIDDEN = 4;
 
 function makeTicker(fn, ms) {
   try {
