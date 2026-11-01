@@ -1,9 +1,11 @@
 // sequencer.js — look-ahead scheduler. Steps are 16th notes; a phrase is 32 steps (2 bars).
-// A ticker (Web Worker, so it isn't throttled as hard when the screen is off)
-// wakes every 100 ms and schedules audio ~0.5 s ahead of the clock.
+// A Web Worker ticks every 250 ms for the whole play session. Each tick schedules audio ahead of
+// the audio clock: 1.2 s while the page is visible, 45 s while hidden (so a frozen or throttled
+// page keeps playing from the audio thread's queue).
 import { PARTS } from './parts.js';
 
-const STEPS = 32, LOOKAHEAD = 1.2, TICK_MS = 250, TAIL_S = 2.5;
+const STEPS = 32, TICK_MS = 250, TAIL_S = 2.5;
+const LOOKAHEAD_VISIBLE = 1.2, LOOKAHEAD_HIDDEN = 45;
 
 function makeTicker(fn, ms) {
   try {
@@ -18,65 +20,92 @@ function makeTicker(fn, ms) {
 }
 
 export class Sequencer {
+  active = false;       // a song is being scheduled (or is in its end gap)
+  gapUntil = null;      // audio-clock time when the end-of-song gap finishes
+  endAt = null;         // audio-clock time a "Next song" fade ends the song
+  phraseStarts = [];    // audio-clock start times of scheduled phrases
+
   constructor(engine, { onPhrase, onEnd }) {
     this.engine = engine;
     this.cb = { onPhrase, onEnd };
   }
 
+  // Ticker lives for the whole play session: open on Play, close on Stop.
+  open() { this.closeTicker ||= makeTicker(() => this.tick(), TICK_MS); }
+  close() { this.stop(); this.closeTicker?.(); this.closeTicker = null; }
+
+  // arranger(phraseIndex) → { chord, active:Set<roleId>, section } | null (song over)
   // startAt (audio-clock seconds) lets a new song begin exactly when the gap ends.
   start(song, arranger, startAt) {
-    this.stop();
-    this.endPending = false;
-    this.late = 0;
-    this.gapUntil = null;
+    this.open();
     this.song = song;
     this.arranger = arranger;
     this.step = 0;
+    this.endAt = null;
+    this.gapUntil = null;
+    this.phraseStarts = [];
     this.next = Math.max(startAt ?? 0, this.engine.ctx.currentTime + 0.1);
+    this.engine.newSong();
     this.engine.setTempo(song.bpm);
-    this.cancel = makeTicker(() => this.tick(), TICK_MS);
+    this.active = true;
     this.tick(); // schedule immediately instead of waiting for the first tick
   }
-  
-  stop() {
-    this.cancel?.(); this.cancel = null;
-    clearTimeout(this.endTimer);
-  }
 
-  // Radio "Next song": let the current phrase finish, then end like a natural song end.
-  // Returns false if nothing is currently scheduling, so the caller can skip immediately.
+  stop() { this.active = false; }
+
+  // Radio "Next song": play to the end of the current phrase, fade out, then end like a
+  // natural song end. Returns false if there's nothing to end (already in the gap).
   endAfterPhrase() {
-    if (!this.cancel || this.gapUntil !== null) return false;
-    this.endPending = true;
+    if (!this.active || this.gapUntil !== null) return false;
+    if (this.endAt !== null) return true; // already ending
+    const now = this.engine.ctx.currentTime + 0.25;
+    let at = this.phraseStarts.find(t => t > now);
+    if (at === undefined) { // no scheduled boundary ahead: compute the next one
+      const stepDur = 60 / this.song.bpm / 4;
+      at = this.next + ((STEPS - (this.step % STEPS)) % STEPS) * stepDur;
+    }
+    this.endAt = Math.max(at, now);
+    this.engine.fadeSong(this.endAt);
+    this.tick();
     return true;
   }
 
   tick() {
     const ctx = this.engine.ctx;
-    if (!ctx) return;
-    
-    if (this.gapUntil !== null) { // song over: wait on the audio clock, then hand off
-      if (ctx.currentTime + LOOKAHEAD >= this.gapUntil) {
+    if (!ctx || !this.active) return;
+
+    // Song over: wait on the audio clock (no timers), then hand off to the next song.
+    if (this.gapUntil !== null) {
+      if (ctx.currentTime + LOOKAHEAD_VISIBLE >= this.gapUntil) {
         const at = this.gapUntil;
         this.gapUntil = null;
         this.cb.onEnd(at);
       }
       return;
     }
-    
-    while (this.cancel && this.next < ctx.currentTime + LOOKAHEAD) {
-      if (this.next < ctx.currentTime) this.late++; // DEBUG: a step scheduled after its start time
+
+    // Woke up far behind (frozen page)? Skip to the next phrase instead of scheduling the past.
+    if (this.next < ctx.currentTime - 0.5) {
+      this.step += (STEPS - (this.step % STEPS)) % STEPS;
+      this.next = ctx.currentTime + 0.1;
+    }
+
+    const look = document.hidden ? LOOKAHEAD_HIDDEN : LOOKAHEAD_VISIBLE;
+    if (this.endAt !== null && this.next >= this.endAt) return this.finish(this.endAt);
+    while (this.next < ctx.currentTime + look) {
       const song = this.song, s = this.step % STEPS, stepDur = 60 / song.bpm / 4;
       if (s === 0) {
         const idx = this.step / STEPS;
-        this.phrase = this.endPending ? null : this.arranger(idx);
-        if (!this.phrase) return this.finish();
+        this.phrase = this.arranger(idx);
+        if (!this.phrase) return this.finish(this.next);
+        this.phraseStarts.push(this.next);
         this.cb.onPhrase(this.phrase, idx);
       }
       const swing = s % 2 ? song.style.swing * stepDur : 0;
       this.playStep(s, this.next + swing, stepDur);
       this.next += stepDur;
       this.step++;
+      if (this.endAt !== null && this.next >= this.endAt) return this.finish(this.endAt);
     }
   }
 
@@ -91,8 +120,8 @@ export class Sequencer {
     }
   }
 
-  // Song over: keep the ticker alive and let the tail ring plus a 1–2 s gap pass on the audio clock.
-  finish() {
-    this.gapUntil = this.next + TAIL_S + 1 + Math.random();
+  // Song over at audio time t: let the tail ring plus a 1–2 s gap pass on the audio clock.
+  finish(t) {
+    this.gapUntil = t + TAIL_S + 1 + Math.random();
   }
 }

@@ -42,12 +42,12 @@ const session = initMediaSession({
 
 // ---- Playback ---------------------------------------------------------------
 async function play() {
+  seq.open();
   session.start(); // must run synchronously inside the tap
   await engine.start();
   const ctx = engine.ctx;
   
   ctx.onstatechange = () => {
-    log(`ctx ${ctx.state}`);
     // If the system suspends us while we should be playing, try to resume.
     if (ctx === engine.ctx && ctx.state !== 'running' && ctx.state !== 'closed' && state.playing && !state.paused) {
       ctx.resume().catch(() => {});
@@ -62,15 +62,13 @@ async function play() {
 
 function stop() {
   clearTimeout(gapTimer);
-  seq.stop(); engine.stop(); session.stop();
+  seq.close(); engine.stop(); session.stop();
   state.playing = false; state.paused = false;
   renderTransport();
 }
 
 // Lock screen / Bluetooth pause: freeze the audio clock so resume continues mid-phrase.
 function pause() {
-  log('pause requested');
-  log('resume requested');
   if (!state.playing || state.paused || !engine.ctx) return;
   state.paused = true;
   engine.ctx.suspend();
@@ -79,8 +77,6 @@ function pause() {
 }
 
 async function resume() {
-  log('pause requested');
-  log('resume requested');
   if (!state.paused || !engine.ctx) return;
   state.paused = false;
   session.start();
@@ -128,7 +124,6 @@ function nextRadio(startAt) {
 }
 
 function onEnd(startAt) {
-  log('song ended, next');
   if (state.playing && state.mode === 'radio') nextRadio(startAt);
   else seq.stop();
 }
@@ -263,26 +258,3 @@ selectStyle(state.styleId);
 renderMode();
 renderTransport();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js');
-
-// DEBUG: event log (last 5) + scheduler/peak readout
-const dbg = [];
-function log(msg) {
-  dbg.push(`${new Date().toLocaleTimeString()} ${msg}`);
-  if (dbg.length > 5) dbg.shift();
-}
-document.addEventListener('visibilitychange', () => log(`page ${document.visibilityState}`));
-
-let peakMax = 0, lastCtx = null, last = 0, inStall = false;
-setInterval(() => {
-  const ctx = engine.ctx;
-  if (!state.playing || !ctx) return;
-  const off = performance.now() / 1000 - ctx.currentTime;
-  if (ctx !== lastCtx) { lastCtx = ctx; last = off; inStall = false; }
-  if (state.paused) { last = off; return; }
-  const jump = (off - last) * 1000;   // audio time lost since the last check
-  last = off;
-  if (jump > 250 && !inStall) { inStall = true; log(`STALL ${jump | 0} ms, ctx ${ctx.state}`); }
-  if (jump < 100 && inStall) { inStall = false; log('recovered'); }
-  peakMax = Math.max(peakMax * 0.995, engine.peak());
-  $('#debug').textContent = `late ${seq.late} · peak ${peakMax.toFixed(2)}\n${dbg.join('\n')}`;
-}, 500);

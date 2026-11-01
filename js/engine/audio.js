@@ -30,11 +30,9 @@ export class AudioEngine {
       this.master = ctx.createGain();
       this.master.gain.value = 0.8;
       this.master.connect(comp).connect(ctx.destination);
-      this.meter = ctx.createAnalyser(); // DEBUG: remove when done
-      this.meter.fftSize = 32768;        // ~0.7 s window, so polling twice a second catches every peak
-      comp.connect(this.meter);
       this.styleId = null;
       this.nodes = [];
+      this.songGains = {};
     }
     if (this.ctx.state !== 'running') await this.ctx.resume();
   }
@@ -92,15 +90,27 @@ export class AudioEngine {
     if (this.dly) this.dly.delayTime.setTargetAtTime((60 / bpm) * this.delayBeats, this.ctx.currentTime, 0.1);
   }
 
-  peak() { // DEBUG: loudest sample in the last ~0.7 s; above 1.0 means clipping
-    const buf = (this.buf ||= new Float32Array(this.meter.fftSize));
-    this.meter.getFloatTimeDomainData(buf);
-    let m = 0;
-    for (let i = 0; i < buf.length; i++) m = Math.max(m, Math.abs(buf[i]));
-    return m;
+  // A fresh gain stage per role for each song, so a song can be faded out as a unit.
+  newSong() {
+    const old = this.songGains || {};
+    setTimeout(() => Object.values(old).forEach(g => g.disconnect()), 15000);
+    this.songGains = {};
+    for (const [id, ch] of Object.entries(this.channels)) {
+      const g = this.ctx.createGain();
+      g.connect(ch);
+      this.songGains[id] = g;
+    }
+  }
+
+  // Fade the current song to silence, finishing exactly at audio time `at`.
+  fadeSong(at, dur = 0.2) {
+    for (const g of Object.values(this.songGains)) {
+      g.gain.setValueAtTime(1, Math.max(at - dur, this.ctx.currentTime));
+      g.gain.linearRampToValueAtTime(0, at);
+    }
   }
 
   play(role, t, ev, voice) {
-    KINDS[role.kind](this.ctx, this.channels[role.id], t, ev, voice.p);
+    KINDS[role.kind](this.ctx, this.songGains[role.id], t, ev, voice.p);
   }
 }
