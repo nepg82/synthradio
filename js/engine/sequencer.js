@@ -3,7 +3,7 @@
 // wakes every 100 ms and schedules audio ~0.5 s ahead of the clock.
 import { PARTS } from './parts.js';
 
-const STEPS = 32, LOOKAHEAD = 1.2, TICK_MS = 250, TAIL_MS = 2500;
+const STEPS = 32, LOOKAHEAD = 1.2, TICK_MS = 250, TAIL_S = 2.5;
 
 function makeTicker(fn, ms) {
   try {
@@ -23,20 +23,21 @@ export class Sequencer {
     this.cb = { onPhrase, onEnd };
   }
 
-  // arranger(phraseIndex) → { chord, active:Set<roleId>, section } | null (song over)
-  start(song, arranger) {
+  // startAt (audio-clock seconds) lets a new song begin exactly when the gap ends.
+  start(song, arranger, startAt) {
     this.stop();
     this.endPending = false;
     this.late = 0;
+    this.gapUntil = null;
     this.song = song;
     this.arranger = arranger;
     this.step = 0;
-	this.next = this.engine.ctx.currentTime + 0.1;
+    this.next = Math.max(startAt ?? 0, this.engine.ctx.currentTime + 0.1);
     this.engine.setTempo(song.bpm);
     this.cancel = makeTicker(() => this.tick(), TICK_MS);
     this.tick(); // schedule immediately instead of waiting for the first tick
   }
-
+  
   stop() {
     this.cancel?.(); this.cancel = null;
     clearTimeout(this.endTimer);
@@ -45,7 +46,7 @@ export class Sequencer {
   // Radio "Next song": let the current phrase finish, then end like a natural song end.
   // Returns false if nothing is currently scheduling, so the caller can skip immediately.
   endAfterPhrase() {
-    if (!this.cancel) return false;
+    if (!this.cancel || this.gapUntil !== null) return false;
     this.endPending = true;
     return true;
   }
@@ -53,6 +54,16 @@ export class Sequencer {
   tick() {
     const ctx = this.engine.ctx;
     if (!ctx) return;
+    
+    if (this.gapUntil !== null) { // song over: wait on the audio clock, then hand off
+      if (ctx.currentTime + LOOKAHEAD >= this.gapUntil) {
+        const at = this.gapUntil;
+        this.gapUntil = null;
+        this.cb.onEnd(at);
+      }
+      return;
+    }
+    
     while (this.cancel && this.next < ctx.currentTime + LOOKAHEAD) {
       if (this.next < ctx.currentTime) this.late++; // DEBUG: a step scheduled after its start time
       const song = this.song, s = this.step % STEPS, stepDur = 60 / song.bpm / 4;
@@ -80,10 +91,8 @@ export class Sequencer {
     }
   }
 
-  // Song over: let the last notes ring out, then notify.
+  // Song over: keep the ticker alive and let the tail ring plus a 1–2 s gap pass on the audio clock.
   finish() {
-    this.cancel?.(); this.cancel = null;
-    const wait = Math.max(0, (this.next - this.engine.ctx.currentTime) * 1000) + TAIL_MS;
-    this.endTimer = setTimeout(() => this.cb.onEnd(), wait);
+    this.gapUntil = this.next + TAIL_S + 1 + Math.random();
   }
 }

@@ -116,7 +116,7 @@ function startManual() {
   seq.start(song, i => ({ chord: i, active: all, section: 'Jam' }));
 }
 
-function nextRadio() {
+function nextRadio(startAt) {
   if (!state.playing) return;
   if (state.allStyles) {
     const pick = STYLES[Math.floor(Math.random() * STYLES.length)];
@@ -124,11 +124,13 @@ function nextRadio() {
   }
   const { song, arranger } = planRadio(style(), state.userBpm);
   adopt(song);
-  seq.start(song, arranger);
+  seq.start(song, arranger, startAt);
 }
 
-function onEnd() {
-  if (state.playing && state.mode === 'radio') gapTimer = setTimeout(nextRadio, 1000 + Math.random() * 1000);
+function onEnd(startAt) {
+  log('song ended, next');
+  if (state.playing && state.mode === 'radio') nextRadio(startAt);
+  else seq.stop();
 }
 
 // Make a song the current one and mirror its choices into state/UI.
