@@ -36,7 +36,7 @@ export function initMediaSession({ onPlay, onPause, onStop, onNext }) {
   return {
     // Call synchronously inside a tap (or a media-session action).
     start() {
-      audio.play().catch(() => {});
+      // audio.play().catch(() => {});
       if (ms) ms.playbackState = 'playing';
     },
     pause() {
