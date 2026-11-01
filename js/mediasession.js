@@ -21,9 +21,11 @@ function silentWavUrl(seconds = 10, rate = 8000) {
   return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
 }
 
-export function initMediaSession({ onPlay, onPause, onStop, onNext }) {
+export function initMediaSession({ onPlay, onPause, onStop, onNext, onLog }) {
   const audio = new Audio(silentWavUrl());
   audio.loop = true;
+  ['play', 'pause', 'waiting', 'stalled', 'ended', 'error'].forEach(ev =>
+    audio.addEventListener(ev, () => onLog?.(`silent el ${ev}`)));
   const ms = navigator.mediaSession;
 
   const handler = (action, fn) => {
@@ -46,6 +48,10 @@ export function initMediaSession({ onPlay, onPause, onStop, onNext }) {
     stop() {
       audio.pause();
       if (ms) ms.playbackState = 'none';
+    },
+    // Page became visible: if the system paused our silent element, start it again.
+    kick() {
+      if (audio.paused) audio.play().catch(() => {});
     },
     setTrack(song) {
       if (!ms) return;

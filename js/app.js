@@ -49,8 +49,9 @@ const seq = new Sequencer(engine, {
 
 let gapTimer;
 const session = initMediaSession({
-  onPlay: () => (state.paused ? resume() : !state.playing && play()),
-  onPause: pause,
+  onLog: log,
+  onPlay: () => { log('media session: play'); return state.paused ? resume() : !state.playing && play(); },
+  onPause: () => { log('media session: pause'); pause(); },
   onStop: stop,
   onNext: nextSong,
 });
@@ -140,6 +141,8 @@ function nextRadio(startAt) {
 }
 
 function onEnd(startAt) {
+  // positive = the handoff ran this late (ms) past the planned start of the next song
+  log(`handoff ${Math.round((engine.ctx.currentTime - startAt) * 1000)} ms after planned start`);
   if (state.playing && state.mode === 'radio') nextRadio(startAt);
   else seq.stop();
 }
@@ -156,6 +159,7 @@ function adopt(song) {
 }
 
 function onPhrase(p, i) {
+  if (i < 8) log(`phrase ${i} ${p.section} [${[...p.active].join(',')}] lead ${(seq.next - engine.ctx.currentTime).toFixed(1)}s`);
   const st = style();
   $('#section').textContent = `${p.section} · phrase ${i + 1}`;
   $('#active').textContent = st.roles.filter(r => p.active.has(r.id)).map(r => r.label).join(', ');
@@ -276,9 +280,14 @@ renderMode();
 renderTransport();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js');
 
-document.addEventListener('visibilitychange', () => log(`page ${document.visibilityState}`));
+document.addEventListener('visibilitychange', () => {
+  log(`page ${document.visibilityState}`);
+  if (!document.hidden && state.playing && !state.paused) session.kick();
+});
+
+const showLog = () => { $('#dbg').textContent = LOG.slice(-150).reverse().join('\n'); };
 $('#ver').onclick = () => {
-  const p = $('#dbg');
-  p.hidden = !p.hidden;
-  if (!p.hidden) p.textContent = LOG.slice(-150).reverse().join('\n'); // newest first
+  $('#dbg').hidden = !$('#dbg').hidden;
+  if (!$('#dbg').hidden) showLog();
 };
+setInterval(() => { if (!$('#dbg').hidden && !document.hidden) showLog(); }, 1000);
