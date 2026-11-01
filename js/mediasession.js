@@ -24,7 +24,7 @@ function silentWavUrl(seconds = 10, rate = 8000) {
 export function initMediaSession({ onPlay, onPause, onStop, onNext, onLog }) {
   const audio = new Audio(silentWavUrl());
   audio.loop = true;
-  ['play', 'pause', 'waiting', 'stalled', 'ended', 'error'].forEach(ev =>
+  ['play', 'pause', 'stalled', 'ended', 'error'].forEach(ev =>
     audio.addEventListener(ev, () => onLog?.(`silent el ${ev}`)));
   const ms = navigator.mediaSession;
 

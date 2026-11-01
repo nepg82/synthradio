@@ -109,6 +109,6 @@ export class AudioEngine {
   }
 
   play(role, t, ev, voice) {
-    KINDS[role.kind](this.ctx, this.songGains[role.id], t, ev, voice.p);
+    KINDS[role.kind](this.ctx, this.channels[role.id], t, ev, voice.p); // TEST: bypass per-song gain stage
   }
 }
