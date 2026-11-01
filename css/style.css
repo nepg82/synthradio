@@ -11,6 +11,8 @@
 html { background: var(--bg); }
 html, body { margin: 0; color: var(--text); }
 
+#debug { white-space: pre-line; font-size: 0.75rem; }
+
 body::before {
   content: "";
   position: fixed;
