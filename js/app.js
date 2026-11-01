@@ -5,6 +5,7 @@ import { Sequencer } from './engine/sequencer.js';
 import { makeSong } from './engine/song.js';
 import { planRadio } from './engine/radio.js';
 import { KEY_NAMES } from './engine/music.js';
+import { initMediaSession } from './mediasession.js';
 
 const $ = s => document.querySelector(s);
 const STEP_DB = 3, MAX_DB = 12, OFF_DB = MIN_DB - STEP_DB;
@@ -19,7 +20,7 @@ const state = {
   levels: saved.levels || {},          // { styleId: { roleId: dB } }
   userBpm: saved.userBpm || null,      // set once the user touches BPM
   bpm: 0, key: Math.floor(Math.random() * 12), prog: 0, voices: {},
-  song: null, playing: false,
+  song: null, playing: false, paused: false,
 };
 const save = () => {
   const { mode, styleId, allStyles, levels, userBpm } = state;
@@ -32,21 +33,58 @@ const levelsFor = st => (state.levels[st.id] ||= Object.fromEntries(st.roles.map
 const engine = new AudioEngine();
 const seq = new Sequencer(engine, { onPhrase, onEnd });
 let gapTimer;
+const session = initMediaSession({
+  onPlay: () => (state.paused ? resume() : !state.playing && play()),
+  onPause: pause,
+  onStop: stop,
+  onNext: nextSong,
+});
 
 // ---- Playback ---------------------------------------------------------------
 async function play() {
+  session.start(); // must run synchronously inside the tap
   await engine.start();
   engine.setStyle(style(), levelsFor(style()));
-  state.playing = true;
+  state.playing = true; state.paused = false;
   state.mode === 'radio' ? nextRadio() : startManual();
   renderTransport();
 }
 
 function stop() {
   clearTimeout(gapTimer);
-  seq.stop(); engine.stop();
-  state.playing = false;
+  seq.stop(); engine.stop(); session.stop();
+  state.playing = false; state.paused = false;
   renderTransport();
+}
+
+// Lock screen / Bluetooth pause: freeze the audio clock so resume continues mid-phrase.
+function pause() {
+  if (!state.playing || state.paused || !engine.ctx) return;
+  state.paused = true;
+  engine.ctx.suspend();
+  session.pause();
+  renderTransport();
+}
+
+async function resume() {
+  if (!state.paused || !engine.ctx) return;
+  state.paused = false;
+  session.start();
+  await engine.ctx.resume();
+  renderTransport();
+}
+
+// Radio "Next song": finish the phrase, then end like a natural song end.
+function nextSong() {
+  if (!state.playing || state.mode !== 'radio') return;
+  if (state.paused) resume();
+  if (seq.endAfterPhrase()) {
+    $('#section').textContent = 'Ending song…';
+  } else { // already in the tail or the gap between songs: just move on
+    clearTimeout(gapTimer);
+    seq.stop();
+    nextRadio();
+  }
 }
 
 const restart = async () => { if (state.playing) { stop(); await play(); } };
@@ -82,6 +120,7 @@ function onEnd() {
 // Make a song the current one and mirror its choices into state/UI.
 function adopt(song) {
   state.song = song;
+  session.setTrack(song);
   state.key = song.key; state.bpm = song.bpm;
   state.prog = song.style.progressions.indexOf(song.progression);
   for (const [id, v] of Object.entries(song.voices)) state.voices[id] = v.name;
@@ -130,10 +169,11 @@ function renderMode() {
   document.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed', b.dataset.mode === state.mode));
   $('#all-styles-row').hidden = state.mode !== 'radio';
   $('#next').hidden = state.mode !== 'radio';
+  session.setRadio(state.mode === 'radio');
 }
 
 function renderTransport() {
-  $('#play').textContent = state.playing ? 'Stop' : 'Play';
+  $('#play').textContent = !state.playing ? 'Play' : state.paused ? 'Resume' : 'Stop';
   if (!state.playing) { $('#section').textContent = 'Stopped'; $('#active').textContent = ''; }
 }
 
@@ -174,19 +214,8 @@ function syncControls() {
 }
 
 // ---- Events -----------------------------------------------------------------
-$('#play').onclick = () => (state.playing ? stop() : play());
-
-$('#next').onclick = () => {
-  if (!state.playing) return;
-  if (seq.endAfterPhrase()) {
-    $('#section').textContent = 'Ending song…';
-  } else { // already in the tail or the gap between songs: just move on
-    clearTimeout(gapTimer);
-    seq.stop();
-    nextRadio();
-  }
-};
-
+$('#play').onclick = () => (state.paused ? resume() : state.playing ? stop() : play());
+$('#next').onclick = nextSong;
 $('#style').onchange = e => { selectStyle(e.target.value); restart(); };
 $('#key').onchange = e => { state.key = +e.target.value; rebuild(); };
 $('#prog').onchange = e => { state.prog = +e.target.value; rebuild(); };
