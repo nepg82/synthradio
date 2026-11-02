@@ -17,33 +17,48 @@ function impulse(ctx, seconds, decay) {
 
 export class AudioEngine {
   ctx = null;
+  songGains = {};
+  tearTimer = null;
   channels = {};
   nodes = [];
   styleId = null;
 
-  // Must be called from a user gesture the first time.
+  // Must be called from a user gesture the first time. The context is created once and reused.
   async start() {
-    if (!this.ctx) {
-      const ctx = (this.ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'playback', sampleRate: 24000 }));
+    if (!this.ctx || this.ctx.state === 'closed') {
+      const ctx = (this.ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'playback', sampleRate: 32000 }));
       const comp = ctx.createDynamicsCompressor();
       comp.threshold.value = -14; comp.knee.value = 10; comp.ratio.value = 4;
       this.master = ctx.createGain();
-      this.master.gain.value = 0.8;
       this.master.connect(comp).connect(ctx.destination);
-      this.styleId = null;
-      this.nodes = [];
-      this.songGains = {};
+      this.nodes = []; this.songGains = {}; this.channels = {}; this.styleId = null;
+    } else if (this.tearTimer) { // Stop was pressed moments ago: finish its cleanup now
+      clearTimeout(this.tearTimer); this.tearTimer = null;
+      this._teardown();
     }
+    const now = this.ctx.currentTime;
+    this.master.gain.cancelScheduledValues(now);
+    this.master.gain.setValueAtTime(0.8, now);
     if (this.ctx.state !== 'running') await this.ctx.resume();
   }
 
-  // Fade out and discard the context (clears any already-scheduled notes).
+  // Stop keeps the context alive: fade, strip the graph, then idle it until the next Play.
   stop() {
     const ctx = this.ctx;
     if (!ctx) return;
-    this.ctx = null; this.channels = {};
     this.master.gain.setTargetAtTime(0, ctx.currentTime, 0.04);
-    setTimeout(() => ctx.close(), 400);
+    this.tearTimer = setTimeout(() => {
+      this.tearTimer = null;
+      this._teardown();
+      ctx.suspend().catch(() => {});
+    }, 250);
+  }
+
+  // Disconnect everything still queued or ringing so nothing leaks into the next Play.
+  _teardown() {
+    Object.values(this.songGains).forEach(g => g.disconnect());
+    this.nodes.forEach(n => n.disconnect());
+    this.nodes = []; this.songGains = {}; this.channels = {}; this.styleId = null;
   }
 
   // Build reverb, delay and one channel per role for a style.

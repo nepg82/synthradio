@@ -177,6 +177,7 @@ function startManual() {
 
 function nextRadio(startAt) {
   if (!state.playing) return;
+  const t0 = performance.now();
   if (state.allStyles) {
     const pick = STYLES[Math.floor(Math.random() * STYLES.length)];
     if (pick.id !== state.styleId) selectStyle(pick.id);
@@ -184,6 +185,7 @@ function nextRadio(startAt) {
   const { song, arranger } = planRadio(style(), state.userBpm);
   adopt(song);
   seq.start(song, arranger, startAt);
+  log(`song setup ${Math.round(performance.now() - t0)} ms, page ${document.visibilityState}`);
 }
 
 function onEnd(startAt) {
@@ -217,7 +219,7 @@ function selectStyle(id) {
   const st = style();
   state.voices = {}; state.prog = 0; state.bpm = state.userBpm || st.bpm.def;
   renderStyle();
-  if (engine.ctx) engine.setStyle(st, levelsFor(st));
+  if (state.playing && engine.ctx) engine.setStyle(st, levelsFor(st));
   save();
 }
 
@@ -332,7 +334,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 const showLog = () => {
-  const end = stats.ended ?? Date.now();
+  const end = stats.ended ?? (stats.last || Date.now()); // no Stop recorded: measure to the last song
   const head = stats.start
     ? `SESSION: ${stats.songs} songs · ${fmtDur(end - stats.start)}${stats.ended ? ' (stopped)' : ''} · last song ${stats.last ? new Date(stats.last).toLocaleTimeString() : '–'}\n---\n`
     : '';
