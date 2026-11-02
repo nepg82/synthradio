@@ -21,9 +21,15 @@ function silentWavUrl(seconds = 10, rate = 8000) {
   return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
 }
 
-export function initMediaSession({ onPlay, onPause, onStop, onNext, onLog }) {
+export function initMediaSession({ onPlay, onPause, onStop, onNext, onLog, onYield, onFocusBack }) {
   const audio = new Audio(silentWavUrl());
   audio.loop = true;
+  let intentional = false; // true when WE paused the element, so we can tell it from the system doing it
+  audio.addEventListener('pause', () => {
+    if (intentional) { intentional = false; return; }
+    onYield?.(); // system paused it: another app took audio focus
+  });
+  audio.addEventListener('play', () => onFocusBack?.());
   ['play', 'pause', 'stalled', 'ended', 'error'].forEach(ev =>
     audio.addEventListener(ev, () => onLog?.(`silent el ${ev}`)));
   const ms = navigator.mediaSession;
@@ -42,10 +48,12 @@ export function initMediaSession({ onPlay, onPause, onStop, onNext, onLog }) {
       if (ms) ms.playbackState = 'playing';
     },
     pause() {
+      if (!audio.paused) intentional = true;
       audio.pause();
       if (ms) ms.playbackState = 'paused';
     },
     stop() {
+      if (!audio.paused) intentional = true;
       audio.pause();
       if (ms) ms.playbackState = 'none';
     },

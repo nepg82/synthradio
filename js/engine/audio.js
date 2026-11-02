@@ -87,6 +87,11 @@ export class AudioEngine {
   setTempo(bpm) {
     if (this.dly) this.dly.delayTime.setTargetAtTime((60 / bpm) * this.delayBeats, this.ctx.currentTime, 0.1);
   }
+  
+  // Mute or unmute everything without touching the song (used when another app takes audio focus).
+  setMuted(on) {
+    if (this.ctx) this.master.gain.setTargetAtTime(on ? 0 : 0.8, this.ctx.currentTime, 0.05);
+  }
 
   // A fresh gain stage per role for each song, so a song can be faded out as a unit.
   newSong() {

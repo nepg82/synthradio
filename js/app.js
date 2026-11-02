@@ -20,7 +20,7 @@ const state = {
   levels: saved.levels || {},          // { styleId: { roleId: dB } }
   userBpm: saved.userBpm || null,      // set once the user touches BPM
   bpm: 0, key: Math.floor(Math.random() * 12), prog: 0, voices: {},
-  song: null, playing: false, paused: false,
+  song: null, playing: false, paused: false, yielded: false,
 };
 const save = () => {
   const { mode, styleId, allStyles, levels, userBpm } = state;
@@ -47,17 +47,25 @@ const seq = new Sequencer(engine, {
   onResync: (ms, phrase) => log(`RESYNC ${ms} ms behind at phrase ${phrase}`),
 });
 
-let gapTimer;
+let gapTimer, yieldTimer;
+const YIELD_GRACE_MS = 45000;
 const session = initMediaSession({
   onLog: log,
-  onPlay: () => { log('media session: play'); return state.paused ? resume() : !state.playing && play(); },
+  onPlay: () => {
+    log('media session: play');
+    if (state.yielded) { session.start(); unyieldAudio(); return; }
+    return state.paused ? resume() : !state.playing && play();
+  },
   onPause: () => { log('media session: pause'); pause(); },
   onStop: stop,
   onNext: nextSong,
+  onYield: yieldAudio,
+  onFocusBack: unyieldAudio,
 });
 
 // ---- Playback ---------------------------------------------------------------
 async function play() {
+  state.yielded = false; clearTimeout(yieldTimer);
   seq.open();
   session.start(); // must run synchronously inside the tap
   await engine.start();
@@ -78,6 +86,7 @@ async function play() {
 }
 
 function stop() {
+  state.yielded = false; clearTimeout(yieldTimer);
   clearTimeout(gapTimer);
   seq.close(); engine.stop(); session.stop();
   state.playing = false; state.paused = false;
@@ -88,6 +97,7 @@ function stop() {
 function pause() {
   if (!state.playing || state.paused || !engine.ctx) return;
   state.paused = true;
+  clearTimeout(yieldTimer); state.yielded = false;
   engine.ctx.suspend();
   session.pause();
   renderTransport();
@@ -96,9 +106,30 @@ function pause() {
 async function resume() {
   if (!state.paused || !engine.ctx) return;
   state.paused = false;
+  engine.setMuted(false);
   session.start();
   await engine.ctx.resume();
   renderTransport();
+}
+
+// Another app (call, video, etc.) took audio focus: go silent, and give up if it doesn't come back.
+function yieldAudio() {
+  if (!state.playing || state.paused || state.yielded) return;
+  state.yielded = true;
+  engine.setMuted(true);
+  log('yield: another app took audio focus');
+  clearTimeout(yieldTimer);
+  yieldTimer = setTimeout(() => {
+    if (state.yielded) { log('yield timeout: stopping'); stop(); }
+  }, YIELD_GRACE_MS);
+}
+
+function unyieldAudio() {
+  if (!state.yielded) return;
+  state.yielded = false;
+  clearTimeout(yieldTimer);
+  engine.setMuted(false);
+  log('unyield: audio focus back');
 }
 
 // Radio "Next song": finish the phrase, then end like a natural song end.
@@ -282,7 +313,7 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js');
 
 document.addEventListener('visibilitychange', () => {
   log(`page ${document.visibilityState}`);
-  if (!document.hidden && state.playing && !state.paused) session.kick();
+    if (!document.hidden && state.playing && !state.paused && !state.yielded) session.kick();
 });
 
 const showLog = () => { $('#dbg').textContent = LOG.slice(-150).reverse().join('\n'); };
