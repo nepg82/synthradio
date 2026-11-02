@@ -36,6 +36,17 @@ function filter(ctx, type, freq, q = 0.7) {
   return f;
 }
 
+// One shared filter per (destination, type, freq, q); drum hits feed it instead of each making their own.
+const sharedCache = new WeakMap();
+function sharedFilter(ctx, out, type, freq, q = 0.7) {
+  let m = sharedCache.get(out);
+  if (!m) sharedCache.set(out, (m = new Map()));
+  const key = `${type}|${freq}|${q}`;
+  let f = m.get(key);
+  if (!f) { f = filter(ctx, type, freq, q); f.connect(out); m.set(key, f); }
+  return f;
+}
+
 // ---- Drums ----------------------------------------------------------------
 
 function kick(ctx, out, t, ev, p) {
@@ -45,14 +56,12 @@ function kick(ctx, out, t, ev, p) {
   o.frequency.exponentialRampToValueAtTime(p.f1, t + p.sweep);
   decayEnv(g, t, ev.vel * p.gain, p.decay);
   o.connect(g);
-  let tail = g;
-  if (p.lp) { tail = filter(ctx, 'lowpass', p.lp); g.connect(tail); }
-  tail.connect(out);
+  g.connect(p.lp ? sharedFilter(ctx, out, 'lowpass', p.lp) : out);
   o.start(t); o.stop(t + p.decay + 0.05);
   if (p.click) { // short noise transient
     const n = noiseSrc(ctx, t, 0.02), cg = ctx.createGain();
     decayEnv(cg, t, ev.vel * p.click, 0.015);
-    n.connect(filter(ctx, 'highpass', 2000)).connect(cg).connect(out);
+    n.connect(cg).connect(sharedFilter(ctx, out, 'highpass', 2000));
   }
 }
 
@@ -63,8 +72,8 @@ function snare(ctx, out, t, ev, p) {
     const d = last ? p.decay : 0.012;
     const n = noiseSrc(ctx, t + off, d + 0.05), g = ctx.createGain();
     decayEnv(g, t + off, ev.vel * p.gain, d);
-    n.connect(filter(ctx, 'bandpass', p.noiseFreq, p.q || 0.8)).connect(g).connect(out);
-  });
+    n.connect(g).connect(sharedFilter(ctx, out, 'bandpass', p.noiseFreq, p.q || 0.8));
+    });
   if (p.tone) {
     const o = ctx.createOscillator(), g = ctx.createGain();
     o.type = 'triangle';
@@ -80,7 +89,7 @@ function hat(ctx, out, t, ev, p) {
   const d = ev.open ? p.openDecay : p.decay;
   const n = noiseSrc(ctx, t, d + 0.05), g = ctx.createGain();
   decayEnv(g, t, ev.vel * p.gain, d);
-  n.connect(filter(ctx, 'highpass', p.freq)).connect(g).connect(out);
+  n.connect(g).connect(sharedFilter(ctx, out, 'highpass', p.freq));
 }
 
 // ---- Subtractive synth (bass / pad / lead / arp / anything tonal) ----------

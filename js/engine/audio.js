@@ -24,7 +24,7 @@ export class AudioEngine {
   // Must be called from a user gesture the first time.
   async start() {
     if (!this.ctx) {
-      const ctx = (this.ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'playback' }));
+      const ctx = (this.ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'playback', sampleRate: 24000 }));
       const comp = ctx.createDynamicsCompressor();
       comp.threshold.value = -14; comp.knee.value = 10; comp.ratio.value = 4;
       this.master = ctx.createGain();
@@ -109,6 +109,6 @@ export class AudioEngine {
   }
 
   play(role, t, ev, voice) {
-    KINDS[role.kind](this.ctx, this.channels[role.id], t, ev, voice.p); // TEST: bypass per-song gain stage
+    KINDS[role.kind](this.ctx, this.songGains[role.id], t, ev, voice.p);
   }
 }
