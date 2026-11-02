@@ -36,9 +36,16 @@ let LOG = [];
 try { LOG = JSON.parse(localStorage.getItem(LOG_KEY) || '[]'); } catch {}
 function log(msg) {
   LOG.push(new Date().toLocaleString('sv-SE').slice(5) + ' ' + msg);
-  if (LOG.length > 500) LOG.splice(0, LOG.length - 500);
+  if (LOG.length > 1500) LOG.splice(0, LOG.length - 1500);
   try { localStorage.setItem(LOG_KEY, JSON.stringify(LOG)); } catch {}
 }
+
+// Per-session song counter, stored separately so the capped log can't push it out.
+const STATS_KEY = 'synthradio-stats';
+let stats = { start: 0, songs: 0, last: 0, ended: null };
+try { stats = JSON.parse(localStorage.getItem(STATS_KEY)) || stats; } catch {}
+const saveStats = () => { try { localStorage.setItem(STATS_KEY, JSON.stringify(stats)); } catch {} };
+const fmtDur = ms => `${Math.floor(ms / 3600000)}h ${Math.floor(ms / 60000) % 60}m`;
 
 const engine = new AudioEngine();
 
@@ -65,6 +72,9 @@ const session = initMediaSession({
 
 // ---- Playback ---------------------------------------------------------------
 async function play() {
+  stats = { start: Date.now(), songs: 0, last: 0, ended: null };
+  saveStats();
+  log('session start');
   state.yielded = false; clearTimeout(yieldTimer);
   seq.open();
   session.start(); // must run synchronously inside the tap
@@ -86,6 +96,11 @@ async function play() {
 }
 
 function stop() {
+  if (state.playing) {
+    stats.ended = Date.now();
+    saveStats();
+    log(`session stopped: ${stats.songs} songs in ${fmtDur(stats.ended - stats.start)}`);
+  }
   state.yielded = false; clearTimeout(yieldTimer);
   clearTimeout(gapTimer);
   seq.close(); engine.stop(); session.stop();
@@ -182,7 +197,8 @@ function onEnd(startAt) {
 function adopt(song) {
   state.song = song;
   session.setTrack(song);
-  log(`song "${song.title}" ${song.bpm} BPM`);
+  if (state.mode === 'radio') { stats.songs++; stats.last = Date.now(); saveStats(); }
+  log(`song ${state.mode === 'radio' ? '#' + stats.songs + ' ' : ''}"${song.title}" ${song.bpm} BPM`);
   state.key = song.key; state.bpm = song.bpm;
   state.prog = song.style.progressions.indexOf(song.progression);
   for (const [id, v] of Object.entries(song.voices)) state.voices[id] = v.name;
@@ -190,7 +206,6 @@ function adopt(song) {
 }
 
 function onPhrase(p, i) {
-  if (i < 8) log(`phrase ${i} ${p.section} [${[...p.active].join(',')}] lead ${(seq.next - engine.ctx.currentTime).toFixed(1)}s`);
   const st = style();
   $('#section').textContent = `${p.section} · phrase ${i + 1}`;
   $('#active').textContent = st.roles.filter(r => p.active.has(r.id)).map(r => r.label).join(', ');
@@ -316,7 +331,14 @@ document.addEventListener('visibilitychange', () => {
     if (!document.hidden && state.playing && !state.paused && !state.yielded) session.kick();
 });
 
-const showLog = () => { $('#dbg').textContent = LOG.slice(-150).reverse().join('\n'); };
+const showLog = () => {
+  const end = stats.ended ?? Date.now();
+  const head = stats.start
+    ? `SESSION: ${stats.songs} songs · ${fmtDur(end - stats.start)}${stats.ended ? ' (stopped)' : ''} · last song ${stats.last ? new Date(stats.last).toLocaleTimeString() : '–'}\n---\n`
+    : '';
+  $('#dbg').textContent = head + LOG.slice(-150).reverse().join('\n');
+};
+
 $('#ver').onclick = () => {
   $('#dbg').hidden = !$('#dbg').hidden;
   if (!$('#dbg').hidden) showLog();
